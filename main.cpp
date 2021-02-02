@@ -44,8 +44,6 @@ Mat guided_filter() {
 int main() {
     I = imread("data_sets/guided-filter-bilateral-off/scan-16-in-guide.tif", IMREAD_ANYDEPTH);
     p = imread("data_sets/guided-filter-bilateral-off/scan-16-in-depth.tif", IMREAD_ANYDEPTH);
-    Mat bilateral = imread("data_sets/guided-filter-bilateral-off/scan-16-out-depth.tif", IMREAD_ANYDEPTH);
-
     I.convertTo(I, CV_64F, 1.0);
     p.convertTo(p, CV_64F, 1.0);
 
@@ -53,11 +51,11 @@ int main() {
         cin >> r >> eps;
 
         show(p, "p");
-        show(bilateral, "bilateral");
-        show(I, "I");
-
         Mat res = guided_filter();
         show(res, "q");
+        print_val(p, "p");
+        print_val(I, "I");
+        print_val(res, "q");
 
         char k = waitKey();
     }

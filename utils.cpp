@@ -32,7 +32,7 @@ void cumulative_sum(Mat &srcMat, Mat &dstMat, char dim) {
     }
 }
 
-Mat box_filter(Mat &srcMat, int r) {
+Mat mat_box_filter(Mat &srcMat, int r) {
     Mat cumMat = Mat::zeros(srcMat.rows, srcMat.cols, CV_64F);
     Mat dstMat = Mat();
 
@@ -59,15 +59,81 @@ Mat box_filter(Mat &srcMat, int r) {
     return dstMat;
 }
 
+double S(Mat &i, Mat &sMat, int x, int y, int offset) {
+    if (y <= offset - 1) return 0;
+    if (sMat.at<double>(x, y) != -1) return sMat.at<double>(x, y);
+    sMat.at<double>(x, y) = (y >= offset ? S(i, sMat, x, y - 1, offset) : 0) + ((y >= i.cols + offset) ? 0 : i.at<double>(x - offset, y - offset));
+    return sMat.at<double>(x, y);
+}
 
+double ii(Mat &i, Mat &iiMat, Mat &sMat, int x, int y, int offset) {
+    if (x <= offset - 1) return 0;
+    if (iiMat.at<double>(x, y) != -1) return iiMat.at<double>(x, y);
+    iiMat.at<double>(x, y) = ((x >= i.rows + offset) ? 0 : S(i, sMat, x, y, offset)) + (x >= offset ? ii(i, iiMat, sMat, x - 1, y, offset) : 0);
+    return iiMat.at<double>(x, y);
+}
+
+Mat box_filter(Mat &srcMat, int r) {
+    Mat iiMat = Mat::ones(srcMat.rows + 2*r + 1, srcMat.cols + 2*r + 1, CV_64F);
+    iiMat *= -1;
+    Mat sMat = Mat::ones(srcMat.rows + 2*r + 1, srcMat.cols + 2*r + 1, CV_64F);
+    sMat *= -1;
+    Mat resMat = Mat::zeros(srcMat.rows, srcMat.cols, CV_64F);
+
+    for (int x = r + 1; x < iiMat.rows - r; x++) {
+        for (int y = r + 1; y < iiMat.cols - r; y++) {
+            resMat.at<double>(x - r - 1, y - r - 1) = ii(srcMat, iiMat, sMat, x + r, y + r, r + 1) -
+                                                        ii(srcMat, iiMat, sMat, x - r - 1, y + r, r + 1) -
+                                                        ii(srcMat, iiMat, sMat, x + r, y - r - 1, r + 1) +
+                                                        ii(srcMat, iiMat, sMat, x - r - 1, y - r - 1, r + 1);
+        }
+    }
+
+    return resMat;
+}
+
+// Convert grayscale depthmap to repeated rainbow
+cv::Mat ConvertToRainbow(cv::Mat grayscale)
+{
+    const float rainbowMultiplier = 16; // how many times to repeat rainbow in whole intervat
+    const double distanceMin = 100;
+    const double distanceMax = 1500;
+    const double distanceToLightnessCoefficient = 256.0 / (distanceMax - distanceMin);
+    cv::Mat shiftedGrayscale;
+    grayscale.convertTo(shiftedGrayscale, CV_32F);
+    shiftedGrayscale = (shiftedGrayscale - distanceMin) * distanceToLightnessCoefficient;
+    for(int i=0; i<shiftedGrayscale.rows; i++)
+        for(int j=0; j<shiftedGrayscale.cols; j++)
+            shiftedGrayscale.at<float>(i, j) = static_cast<float>(static_cast<int32_t>(shiftedGrayscale.at<float>(i, j) * rainbowMultiplier) % 176);
+    shiftedGrayscale.convertTo(shiftedGrayscale, CV_8U);
+    grayscale.convertTo(grayscale, CV_8U);
+    cv::Mat rainbow;
+    cv::cvtColor(grayscale, rainbow, CV_GRAY2BGR);
+    cv::cvtColor(rainbow, rainbow, CV_BGR2HSV);
+    std::vector<cv::Mat> hsvChannels;
+    cv::split(rainbow, hsvChannels);
+    hsvChannels[0] = shiftedGrayscale;
+    cv::threshold(grayscale, hsvChannels[1], 0, 255, cv::THRESH_BINARY);
+    cv::threshold(grayscale, hsvChannels[2], 0, 255, cv::THRESH_BINARY);
+    cv::merge(hsvChannels, rainbow);
+    cv::cvtColor(rainbow, rainbow, CV_HSV2BGR);
+    return rainbow;
+}
 
 void show (Mat &mat, String name) {
     double minVal;
     double maxVal;
     minMaxLoc(mat, &minVal, &maxVal);
     Mat res = Mat(mat.rows, mat.cols, CV_8U);
-    mat.convertTo(res, CV_8U, 255.0/maxVal);
 
-    imshow("Display " + name, res);
+   /* for (int i = 0; i < mat.rows; i++) {
+        for (int j = 0; j < mat.cols; j++) {
+            if (mat.at<double>(i, j) < 0) mat.at<double>(i, j) = 0;
+        }
+    }*/
+
+    //mat.convertTo(res, CV_8U, 255 / maxVal);
+
+    imshow("Display " + name, ConvertToRainbow(mat));
 }
 
