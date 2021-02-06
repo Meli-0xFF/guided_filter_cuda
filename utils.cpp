@@ -2,29 +2,46 @@
 
 using namespace std;
 
-void print_val(Mat &mat, String name) {
-    double minVal;
-    double maxVal;
+float max_val(Mat &mat) {
+    float maxVal = 0;
 
-    minMaxLoc(mat, &minVal, &maxVal);
+    for (int i = 0; i < mat.rows; i++) {
+        for (int j = 0; j < mat.rows; j++) {
+            if(mat.at<float>(i,j) >= maxVal) maxVal = mat.at<float>(i,j);
+        }
+    }
+    return maxVal;
+}
+
+void print_val(Mat &mat, String name) {
+    float minVal = 10000000;
+    float maxVal = 0;
+
+    for (int i = 0; i < mat.rows; i++) {
+        for (int j = 0; j < mat.rows; j++) {
+            if(mat.at<float>(i,j) >= maxVal) maxVal = mat.at<float>(i,j);
+            if(mat.at<float>(i,j) < minVal) minVal = mat.at<float>(i,j);
+        }
+    }
+
     cout << name << " min = " << minVal << " max = " << maxVal << endl;
 }
 
 void cumulative_sum(Mat &srcMat, Mat &dstMat, char dim) {
     if (dim == 'x') {
         for (int i = 0; i < srcMat.rows; i++) {
-            double row_cum_sum = 0;
+            float row_cum_sum = 0;
             for (int j = 0; j < srcMat.cols; j++) {
-                dstMat.at<double>(i, j) = srcMat.at<double>(i, j) + row_cum_sum;
-                row_cum_sum += srcMat.at<double>(i, j);
+                dstMat.at<float>(i, j) = srcMat.at<float>(i, j) + row_cum_sum;
+                row_cum_sum += srcMat.at<float>(i, j);
             }
         }
     } else if (dim == 'y') {
         for (int i = 0; i < srcMat.cols; i++) {
-            double col_cum_sum = 0;
+            float col_cum_sum = 0;
             for (int j = 0; j < srcMat.rows; j++) {
-                dstMat.at<double>(j, i) = srcMat.at<double>(j, i) + col_cum_sum;
-                col_cum_sum += srcMat.at<double>(j, i);
+                dstMat.at<float>(j, i) = srcMat.at<float>(j, i) + col_cum_sum;
+                col_cum_sum += srcMat.at<float>(j, i);
             }
         }
     } else {
@@ -32,8 +49,8 @@ void cumulative_sum(Mat &srcMat, Mat &dstMat, char dim) {
     }
 }
 
-Mat mat_box_filter(Mat &srcMat, int r) {
-    Mat cumMat = Mat::zeros(srcMat.rows, srcMat.cols, CV_32F);
+Mat box_filter(Mat &srcMat, int r) {
+    Mat cumMat = Mat::zeros(srcMat.rows, srcMat.cols, MAT_TYPE);
     Mat dstMat = Mat();
 
 
@@ -76,12 +93,12 @@ float ii(Mat &i, Mat &iiMat, Mat &sMat, int x, int y, int offset) {
     return iiMat.at<float>(x, y);
 }
 
-Mat box_filter(Mat &srcMat, int r) {
-    Mat iiMat = Mat::ones(srcMat.rows + 2*r + 1, srcMat.cols + 2*r + 1, CV_32F);
-    iiMat *= -1.0f;
-    Mat sMat = Mat::ones(srcMat.rows + 2*r + 1, srcMat.cols + 2*r + 1, CV_32F);
-    sMat *= -1.0f;
-    Mat resMat = Mat::zeros(srcMat.rows, srcMat.cols, CV_32F);
+Mat mat_box_filter(Mat &srcMat, int r) {
+    Mat iiMat = Mat::ones(srcMat.rows + 2*r + 1, srcMat.cols + 2*r + 1, MAT_TYPE);
+    iiMat *= -1.0;
+    Mat sMat = Mat::ones(srcMat.rows + 2*r + 1, srcMat.cols + 2*r + 1, MAT_TYPE);
+    sMat *= -1.0;
+    Mat resMat = Mat::zeros(srcMat.rows, srcMat.cols, MAT_TYPE);
 
     for (int x = r + 1; x < iiMat.rows - r; x++) {
         for (int y = r + 1; y < iiMat.cols - r; y++) {
@@ -95,18 +112,17 @@ Mat box_filter(Mat &srcMat, int r) {
 }
 
 // Convert grayscale depthmap to repeated rainbow
-cv::Mat ConvertToRainbow(cv::Mat grayscale)
-{
+cv::Mat ConvertToRainbow(cv::Mat grayscale) {
     const float rainbowMultiplier = 32; // how many times to repeat rainbow in whole intervat
     const double distanceMin = 100;
     const double distanceMax = 1500;
     const double distanceToLightnessCoefficient = 256.0 / (distanceMax - distanceMin);
     cv::Mat shiftedGrayscale;
-    grayscale.convertTo(shiftedGrayscale, CV_32F);
+    grayscale.convertTo(shiftedGrayscale, MAT_TYPE);
     shiftedGrayscale = (shiftedGrayscale - distanceMin) * distanceToLightnessCoefficient;
     for(int i=0; i<shiftedGrayscale.rows; i++)
         for(int j=0; j<shiftedGrayscale.cols; j++)
-            shiftedGrayscale.at<float>(i, j) = static_cast<double>(static_cast<int32_t>(shiftedGrayscale.at<float>(i, j) * rainbowMultiplier) % 176);
+            shiftedGrayscale.at<float>(i, j) = static_cast<float>(static_cast<int32_t>(shiftedGrayscale.at<float>(i, j) * rainbowMultiplier) % 176);
     shiftedGrayscale.convertTo(shiftedGrayscale, CV_8U);
     grayscale.convertTo(grayscale, CV_8U);
     cv::Mat rainbow;
@@ -122,22 +138,11 @@ cv::Mat ConvertToRainbow(cv::Mat grayscale)
     return rainbow;
 }
 
-void show (Mat &mat, String name) {
-    double minVal;
-    double maxVal;
-    minMaxLoc(mat, &minVal, &maxVal);
+Mat show (Mat &mat, String name) {
     Mat res = Mat(mat.rows, mat.cols, CV_8U);
 
-    for (int i = 0; i < mat.rows; i++) {
-        for (int j = 0; j < mat.cols; j++) {
-            if (mat.at<float>(i, j) < 0) mat.at<float>(i, j) = 0;
-        }
-    }
-
-
-
-    mat.convertTo(res, CV_8U, 255 / maxVal);
-
-    imshow("Display " + name, ConvertToRainbow(mat));
+    mat.convertTo(res, CV_8U, 255 / max_val(mat));
+    imshow("Display " + name, res);
+    return res;
 }
 
