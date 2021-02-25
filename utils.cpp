@@ -1,12 +1,53 @@
-#include "utils.h"
+#include "utils.hpp"
+
+
+ 
+
+
 
 using namespace std;
+
+
+Mat divide(Mat &A, Mat &B) {
+    Mat C = Mat(A.rows, A.cols, MAT_TYPE);
+    for (int i = 0; i < A.rows; i++) {
+        for (int j = 0; j < A.cols; j++) {
+            if (B.at<float>(i, j) == 0) C.at<float>(i, j) = 0;
+            else if (B.at<float>(i, j) < 1.0) C.at<float>(i, j) = A.at<float>(i, j);
+            else C.at<float>(i, j) = A.at<float>(i, j) / B.at<float>(i, j);
+        }
+    }
+
+    return C;
+}
+
+Mat multiply(Mat &A, Mat &B) {
+    Mat C = Mat::zeros(A.rows, A.cols, MAT_TYPE);
+    for (int i = 0; i < A.rows; i++) {
+        for (int j = 0; j < A.cols; j++) {
+            if (A.at<float>(i, j) == 0) continue;
+            if (B.at<float>(i, j) == 0) continue;
+            
+            C.at<float>(i, j) = A.at<float>(i, j) * B.at<float>(i, j);
+        }
+    }
+
+    return C;
+}
+
+void copy_zeros(Mat &src, Mat &dst) {
+    for (int i = 0; i < src.rows; i++) {
+        for (int j = 0; j < src.cols; j++) {
+            if (src.at<float>(i, j) == 0) dst.at<float>(i, j) = 0;
+        }
+    }
+}
 
 float max_val(Mat &mat) {
     float maxVal = 0;
 
     for (int i = 0; i < mat.rows; i++) {
-        for (int j = 0; j < mat.rows; j++) {
+        for (int j = 0; j < mat.cols; j++) {
             if(mat.at<float>(i,j) >= maxVal) maxVal = mat.at<float>(i,j);
         }
     }
@@ -18,7 +59,7 @@ void print_val(Mat &mat, String name) {
     float maxVal = 0;
 
     for (int i = 0; i < mat.rows; i++) {
-        for (int j = 0; j < mat.rows; j++) {
+        for (int j = 0; j < mat.cols; j++) {
             if(mat.at<float>(i,j) >= maxVal) maxVal = mat.at<float>(i,j);
             if(mat.at<float>(i,j) < minVal) minVal = mat.at<float>(i,j);
         }
@@ -27,21 +68,91 @@ void print_val(Mat &mat, String name) {
     cout << name << " min = " << minVal << " max = " << maxVal << endl;
 }
 
+float mat_treshold(Mat &mat, float part) {
+    float minVal = 10000000;
+    float maxVal = 0;
+
+    for (int i = 0; i < mat.rows; i++) {
+        for (int j = 0; j < mat.cols; j++) {
+            if(mat.at<float>(i,j) >= maxVal) maxVal = mat.at<float>(i,j);
+            if(mat.at<float>(i,j) < minVal) minVal = mat.at<float>(i,j);
+        }
+    }
+
+    return (maxVal / part);
+}
+
+void noise_to_zero(Mat &src, Mat &guide_var, Mat &kernel_pixels, Mat &dst, float treshold, float min_in_kernel) {
+    for (int i = 0; i < src.rows; i++) {
+        for (int j = 0; j < src.cols; j++) {
+            if ((guide_var.at<float>(i, j) < treshold) && (kernel_pixels.at<float>(i, j) < min_in_kernel)) dst.at<float>(i, j) = 0;
+            else dst.at<float>(i, j) = src.at<float>(i, j);
+        }
+    }
+}
+
 void cumulative_sum(Mat &srcMat, Mat &dstMat, char dim) {
     if (dim == 'x') {
         for (int i = 0; i < srcMat.rows; i++) {
             float row_cum_sum = 0;
             for (int j = 0; j < srcMat.cols; j++) {
-                dstMat.at<float>(i, j) = srcMat.at<float>(i, j) + row_cum_sum;
-                row_cum_sum += srcMat.at<float>(i, j);
+                if (srcMat.at<float>(i, j) == 0.0) {
+                    dstMat.at<float>(i, j) = row_cum_sum;
+                } else {
+                    dstMat.at<float>(i, j) = srcMat.at<float>(i, j) + row_cum_sum;
+                    row_cum_sum += srcMat.at<float>(i, j);
+                }
             }
         }
     } else if (dim == 'y') {
         for (int i = 0; i < srcMat.cols; i++) {
             float col_cum_sum = 0;
             for (int j = 0; j < srcMat.rows; j++) {
-                dstMat.at<float>(j, i) = srcMat.at<float>(j, i) + col_cum_sum;
-                col_cum_sum += srcMat.at<float>(j, i);
+                if (srcMat.at<float>(j, i) == 0.0) {
+                    dstMat.at<float>(j, i) = col_cum_sum;
+                } else {
+                    dstMat.at<float>(j, i) = srcMat.at<float>(j, i) + col_cum_sum;
+                    col_cum_sum += srcMat.at<float>(j, i);
+                }
+            }
+        }
+    } else {
+        std::cout << "Invalid dim parameter: You can choose from x or y dimension parameter.";
+    }
+}
+
+float samples_delta(Mat &srcMat, int i, int j, int k, int l, char dim) {
+    if (dim == 'x') {
+        if (j < 0) return srcMat.at<float>(k, l);
+        else if (l >= srcMat.cols) l = srcMat.cols - 1;
+        
+        if (srcMat.at<float>(k, l) == 0) return 0;
+        else if (srcMat.at<float>(i, j) == 0) return srcMat.at<float>(k, l);
+        return (srcMat.at<float>(k, l) - srcMat.at<float>(i, j));
+    } else if (dim == 'y') {
+        if (i < 0) return srcMat.at<float>(k, l);
+        else if (k >= srcMat.rows) k = srcMat.rows - 1;
+    
+        if (srcMat.at<float>(k, l) == 0) return 0;
+        else if (srcMat.at<float>(i, j) == 0) return srcMat.at<float>(k, l);
+        return (srcMat.at<float>(k, l) - srcMat.at<float>(i, j));
+    } else {
+        std::cout << "Invalid dim parameter: You can choose from x or y dimension parameter.";
+        return -1;
+    }
+}
+
+void box_run(Mat &srcMat, Mat &dstMat, char dim, int r) {
+    if (dim == 'x') {
+        for (int i = 0; i < srcMat.rows; i++) {
+            for (int j = 0; j < srcMat.cols; j++) {
+                dstMat.at<float>(i, j) = samples_delta(srcMat, i, j - r - 1, i, j + r, 'x');
+            }
+        }
+    } else if (dim == 'y') {
+        for (int i = 0; i < srcMat.cols; i++) {
+            for (int j = 0; j < srcMat.rows; j++) {
+                dstMat.at<float>(j, i) = samples_delta(srcMat, j - r - 1, i, j + r, i, 'y');
             }
         }
     } else {
@@ -50,6 +161,24 @@ void cumulative_sum(Mat &srcMat, Mat &dstMat, char dim) {
 }
 
 Mat box_filter(Mat &srcMat, int r) {
+    Mat tmpMat = Mat::zeros(srcMat.rows, srcMat.cols, MAT_TYPE);
+    
+    Mat iMat = Mat::zeros(srcMat.rows, srcMat.cols, MAT_TYPE);
+    Mat boxMatX = Mat::zeros(srcMat.rows, srcMat.cols, MAT_TYPE);
+    Mat resMat = Mat::zeros(srcMat.rows, srcMat.cols, MAT_TYPE);
+    
+    cumulative_sum(srcMat, tmpMat, 'x');
+    cumulative_sum(tmpMat, iMat, 'y');
+    
+    box_run(iMat, boxMatX, 'x', r);
+    box_run(boxMatX, resMat, 'y', r);
+    
+    copy_zeros(srcMat, resMat);
+    
+    return resMat;
+}
+
+Mat new_box_filter(Mat &srcMat, int r) {
     Mat cumMat = Mat::zeros(srcMat.rows, srcMat.cols, MAT_TYPE);
     Mat dstMat = Mat();
 
@@ -76,40 +205,6 @@ Mat box_filter(Mat &srcMat, int r) {
     return dstMat;
 }
 
-float S(Mat &i, Mat &sMat, int x, int y, int offset) {
-    if (y <= offset - 1) return 0;
-    if (sMat.at<float>(x, y) != -1) return sMat.at<float>(x, y);
-    sMat.at<float>(x, y) = (y >= offset ? S(i, sMat, x, y - 1, offset) : 0) + ((y >= i.cols + offset) ? 0 : i.at<float>(x - offset, y - offset));
-    return sMat.at<float>(x, y);
-}
-
-float ii(Mat &i, Mat &iiMat, Mat &sMat, int x, int y, int offset) {
-    if (x <= offset - 1) {
-        iiMat.at<float>(x, y) = 0;
-        return 0;
-    }
-    if (iiMat.at<float>(x, y) != -1) return iiMat.at<float>(x, y);
-    iiMat.at<float>(x, y) = ((x >= i.rows + offset) ? 0 : S(i, sMat, x, y, offset)) + (x >= offset ? ii(i, iiMat, sMat, x - 1, y, offset) : 0);
-    return iiMat.at<float>(x, y);
-}
-
-Mat mat_box_filter(Mat &srcMat, int r) {
-    Mat iiMat = Mat::ones(srcMat.rows + 2*r + 1, srcMat.cols + 2*r + 1, MAT_TYPE);
-    iiMat *= -1.0;
-    Mat sMat = Mat::ones(srcMat.rows + 2*r + 1, srcMat.cols + 2*r + 1, MAT_TYPE);
-    sMat *= -1.0;
-    Mat resMat = Mat::zeros(srcMat.rows, srcMat.cols, MAT_TYPE);
-
-    for (int x = r + 1; x < iiMat.rows - r; x++) {
-        for (int y = r + 1; y < iiMat.cols - r; y++) {
-            resMat.at<float>(x - r - 1, y - r - 1) = ii(srcMat, iiMat, sMat, x + r, y + r, r + 1) -
-                                                        ii(srcMat, iiMat, sMat, x - r - 1, y + r, r + 1) -
-                                                        ii(srcMat, iiMat, sMat, x + r, y - r - 1, r + 1) +
-                                                        ii(srcMat, iiMat, sMat, x - r - 1, y - r - 1, r + 1);
-        }
-    }
-    return resMat;
-}
 
 // Convert grayscale depthmap to repeated rainbow
 cv::Mat ConvertToRainbow(cv::Mat grayscale) {
@@ -118,10 +213,10 @@ cv::Mat ConvertToRainbow(cv::Mat grayscale) {
     const double distanceMax = 1500;
     const double distanceToLightnessCoefficient = 256.0 / (distanceMax - distanceMin);
     cv::Mat shiftedGrayscale;
-    grayscale.convertTo(shiftedGrayscale, MAT_TYPE);
+    grayscale.convertTo(shiftedGrayscale, CV_32F);
     shiftedGrayscale = (shiftedGrayscale - distanceMin) * distanceToLightnessCoefficient;
     for(int i=0; i<shiftedGrayscale.rows; i++)
-        for(int j=0; j<shiftedGrayscale.cols; j++)
+        for(int j=0; j<shiftedGrayscale.cols; j++) 
             shiftedGrayscale.at<float>(i, j) = static_cast<float>(static_cast<int32_t>(shiftedGrayscale.at<float>(i, j) * rainbowMultiplier) % 176);
     shiftedGrayscale.convertTo(shiftedGrayscale, CV_8U);
     grayscale.convertTo(grayscale, CV_8U);
@@ -139,6 +234,17 @@ cv::Mat ConvertToRainbow(cv::Mat grayscale) {
 }
 
 Mat show (Mat &mat, String name) {
+    imshow("Display " + name, ConvertToRainbow(mat));
+    return mat;
+}
+
+struct RGB {        //members are in "bgr" order!
+   uchar blue;
+   uchar green;
+   uchar red;  
+ };
+
+Mat show_grayscale (Mat &mat, String name) {
     Mat res = Mat(mat.rows, mat.cols, CV_8U);
 
     mat.convertTo(res, CV_8U, 255 / max_val(mat));
